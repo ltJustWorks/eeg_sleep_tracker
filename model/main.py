@@ -4,6 +4,7 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.pipeline import make_pipeline
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import FunctionTransformer
 from mne.datasets import sleep_physionet
 import pandas as pd
@@ -58,6 +59,7 @@ def parse_epochs(raw, events, event_id):
         tmin=0.0,
         tmax= 30.0 - 1.0 / raw.info["sfreq"],
         baseline=None,
+        preload=True,
     )
 
     print("Epochs:", epochs)
@@ -109,32 +111,62 @@ def transform_epochs(epochs: mne.Epochs):
         psds_band = psds[:, :, (freqs >= fmin) & (freqs < fmax)].mean(axis=-1)
         X.append(psds_band.reshape(len(psds), -1))
 
-    print(pd.DataFrame.from_records(np.concatenate(X, axis=1)).head())
     return np.concatenate(X, axis=1)
 
 def transform_epochs_list(epochs_list):
     return [transform_epochs(epochs) for epochs in epochs_list]
 
-raw_list, events_list = get_sleep_data(1)
-epochs_list = []
-for raw, events in zip(raw_list, events_list):
-    epochs_list.append(parse_epochs(raw, events, EVENT_ID))
+def parse_patients(patients_list):
+    total_epochs_list = []
+    total_stages_list = []
+    for patient in patients_list:
+        raw_list, events_list = patient
+        epochs_list = []
+        stages_list = []
 
-#plot_sleep_stages(raw_train, events_train, EVENT_ID)
-pipe = make_pipeline(
-    FunctionTransformer(transform_epochs, validate=False),
-    RandomForestClassifier(n_estimators=100, random_state=1)
-)
+        for raw, events in zip(raw_list, events_list):
+            recording_epochs = parse_epochs(raw, events, EVENT_ID)
+            print(pd.DataFrame.from_records(recording_epochs).head())
+            epochs_list.append(transform_epochs(recording_epochs))
+            recording_stages = recording_epochs.events[:, 2]
+            stages_list.append(recording_stages)
 
-epochs_train = epochs_list[0]
-epochs_test = epochs_list[1]
+        total_epochs_list.append(np.concatenate(epochs_list, axis=0))
+        total_stages_list.append(np.concatenate(stages_list, axis=0))
+    return np.concatenate(total_epochs_list, axis=0), np.concatenate(total_stages_list, axis=0)
 
-y_train = epochs_train.events[:, 2]
+def train_model(patients_list):
+    epochs_data, stages_data = parse_patients(patients_list)
 
-pipe.fit(epochs_train, y_train)
+    X_train, X_test, y_train, y_test = train_test_split(epochs_data, stages_data, test_size=0.2, random_state=1)
 
-y_pred = pipe.predict(epochs_test)
-y_test = epochs_test.events[:, 2]
-acc = accuracy_score(y_test, y_pred)
+    model = RandomForestClassifier(n_estimators=100, random_state=1)
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    score = accuracy_score(y_test, y_pred)
+    print("Accuracy score:", score)
 
-print("Accuracy score: {}".format(acc))
+if __name__ == "__main__":
+    patients_list = [get_sleep_data(i) for i in range(1, 5+1)]
+    train_model(patients_list)
+
+
+# #plot_sleep_stages(raw_train, events_train, EVENT_ID)
+# pipe = make_pipeline(
+#     FunctionTransformer(transform_epochs, validate=False),
+#     RandomForestClassifier(n_estimators=100, random_state=1)
+# )
+
+# epochs_train = epochs_list[0]
+# epochs_test = epochs_list[1]
+
+# y_train = epochs_train.events[:, 2]
+# print(y_train)
+
+# pipe.fit(epochs_train, y_train)
+
+# y_pred = pipe.predict(epochs_test)
+# y_test = epochs_test.events[:, 2]
+# acc = accuracy_score(y_test, y_pred)
+
+# print("Accuracy score: {}".format(acc))

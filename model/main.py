@@ -6,6 +6,9 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from sklearn.pipeline import make_pipeline
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import FunctionTransformer
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import KFold
+
 from mne.datasets import sleep_physionet
 import pandas as pd
 
@@ -62,7 +65,7 @@ def parse_epochs(raw, events, event_id):
         preload=True,
     )
 
-    print("Epochs:", epochs)
+    #print("Epochs:", epochs)
     return epochs
 
 def plot_sleep_stages(raw_train, events_train, event_id):
@@ -137,17 +140,21 @@ def parse_patients(patients_list):
 
 def train_model(patients_list):
     epochs_data, stages_data = parse_patients(patients_list)
-
-    X_train, X_test, y_train, y_test = train_test_split(epochs_data, stages_data, test_size=0.2, random_state=1)
-
     model = RandomForestClassifier(n_estimators=100, random_state=1)
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
-    score = accuracy_score(y_test, y_pred)
-    print("Accuracy score:", score)
+
+    # Perform 5-fold cross-validation
+    scores = cross_val_score(model, epochs_data, stages_data, cv=5)
+
+    # Print the accuracy scores for each fold
+    print("Accuracy scores for each fold:", scores)
+
+    # Calculate and print the mean accuracy score
+    mean_accuracy = np.mean(scores)
+    print("Mean Accuracy score:", mean_accuracy)
+    return model
 
 if __name__ == "__main__":
-    patients_list = [get_sleep_data(i) for i in range(1, 5+1)]
+    patients_list = [get_sleep_data(i) for i in range(1, 10+1)]
     train_model(patients_list)
 
 

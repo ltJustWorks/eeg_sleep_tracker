@@ -5,6 +5,7 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import cross_val_predict, cross_val_score, GridSearchCV, KFold
+import xgboost as xgb
 import seaborn as sns
 
 from mne.datasets import sleep_physionet
@@ -138,15 +139,16 @@ def parse_patients(patients_list):
 
 def train_model(patients_list):
     epochs_data, stages_data = parse_patients(patients_list)
+    stages_data -= 1
 
     param_grid = {
         'n_estimators': [50, 100, 200],
-        'max_depth': [None, 10, 20],
-        'min_samples_split': [2, 5, 10],
-        'min_samples_leaf': [1, 2, 4],
-        'max_features': ['auto', 'sqrt']
+        'max_depth': [3, 6, 9],
+        'learning_rate': [0.1, 0.01, 0.001],
+        'subsample': [0.8, 0.9, 1.0],
+        'colsample_bytree': [0.8, 0.9, 1.0]
     }
-    model = RandomForestClassifier(random_state=1)
+    model = xgb.XGBClassifier(seed=1)
     kf = KFold(n_splits=5, shuffle=True, random_state=1)
     grid_search = GridSearchCV(estimator=model, param_grid=param_grid, cv=kf, scoring='accuracy', n_jobs=-1)
     grid_search.fit(epochs_data, stages_data)

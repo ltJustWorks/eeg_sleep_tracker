@@ -1,13 +1,11 @@
 import mne
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-from sklearn.pipeline import make_pipeline
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import FunctionTransformer
-from sklearn.model_selection import cross_val_score
-from sklearn.model_selection import KFold
+from sklearn.metrics import confusion_matrix
+from sklearn.model_selection import cross_val_predict, cross_val_score, GridSearchCV, KFold
+import seaborn as sns
 
 from mne.datasets import sleep_physionet
 import pandas as pd
@@ -129,7 +127,7 @@ def parse_patients(patients_list):
 
         for raw, events in zip(raw_list, events_list):
             recording_epochs = parse_epochs(raw, events, EVENT_ID)
-            print(pd.DataFrame.from_records(recording_epochs).head())
+            #print(pd.DataFrame.from_records(recording_epochs).head())
             epochs_list.append(transform_epochs(recording_epochs))
             recording_stages = recording_epochs.events[:, 2]
             stages_list.append(recording_stages)
@@ -140,40 +138,44 @@ def parse_patients(patients_list):
 
 def train_model(patients_list):
     epochs_data, stages_data = parse_patients(patients_list)
-    model = RandomForestClassifier(n_estimators=100, random_state=1)
 
-    # Perform 5-fold cross-validation
-    scores = cross_val_score(model, epochs_data, stages_data, cv=5)
+    param_grid = {
+        'n_estimators': [50, 100, 200],
+        'max_depth': [None, 10, 20],
+        'min_samples_split': [2, 5, 10],
+        'min_samples_leaf': [1, 2, 4],
+        'max_features': ['auto', 'sqrt']
+    }
+    model = RandomForestClassifier(random_state=1)
+    kf = KFold(n_splits=5, shuffle=True, random_state=1)
+    grid_search = GridSearchCV(estimator=model, param_grid=param_grid, cv=kf, scoring='accuracy', n_jobs=-1)
+    grid_search.fit(epochs_data, stages_data)
 
-    # Print the accuracy scores for each fold
-    print("Accuracy scores for each fold:", scores)
+    best_params = grid_search.best_params_
+    best_score = grid_search.best_score_
 
-    # Calculate and print the mean accuracy score
-    mean_accuracy = np.mean(scores)
-    print("Mean Accuracy score:", mean_accuracy)
+    print("Best parameters:", best_params)
+    print("Best score:", best_score)
+
+    cross_val_scores = cross_val_score(grid_search.best_estimator_, epochs_data, stages_data, cv=kf, scoring='accuracy')
+
+    print("Cross-validated scores:", cross_val_scores)
+    print("Accuracy:", cross_val_scores.mean())
+
+    # cm = confusion_matrix(stages_data, y_pred)
+    # print("Confusion Matrix:")
+    # print(cm)
+
+    # unique_classes = np.unique(stages_data)
+    # plt.figure(figsize=(8, 6))
+    # sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=unique_classes, yticklabels=unique_classes, norm=LogNorm())
+    # plt.xlabel('Predicted')
+    # plt.ylabel('Real')
+    # plt.title('Confusion Matrix')
+    # plt.show()
+
     return model
 
 if __name__ == "__main__":
     patients_list = [get_sleep_data(i) for i in range(1, 10+1)]
     train_model(patients_list)
-
-
-# #plot_sleep_stages(raw_train, events_train, EVENT_ID)
-# pipe = make_pipeline(
-#     FunctionTransformer(transform_epochs, validate=False),
-#     RandomForestClassifier(n_estimators=100, random_state=1)
-# )
-
-# epochs_train = epochs_list[0]
-# epochs_test = epochs_list[1]
-
-# y_train = epochs_train.events[:, 2]
-# print(y_train)
-
-# pipe.fit(epochs_train, y_train)
-
-# y_pred = pipe.predict(epochs_test)
-# y_test = epochs_test.events[:, 2]
-# acc = accuracy_score(y_test, y_pred)
-
-# print("Accuracy score: {}".format(acc))

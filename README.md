@@ -1,5 +1,8 @@
 # Overview
 
+Sample size: 10 patients (with multiple night recordings)
+Current model accuracy: 83%
+
 Goals:
 
 1. Train model using PSG data from open-source database to classify sleep stages given EEG readings.
